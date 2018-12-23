@@ -25,29 +25,43 @@ typedef struct {
 uint8_t unknown_header[] = {0x01, 0x00, 0x01, 0x00, 0x01, 0xea, 0x00};
 
 void main(int argc, char* argv[]){
-	char lens_name[] = "AI Nikkor 50mm f/1.4S";
-	LensProfile l1 = {0};
-	memcpy(l1.unknown_data0, unknown_header, 7);
-	strcpy(l1.lens_name, lens_name);
-	l1.lens_name_len = strlen(lens_name);
-
-	l1.use_lens_focal_length_value = 0;
-	uint16_t focal_length = 50;
-	l1.lens_focal_length_msb = (focal_length >> 8);
-	l1.lens_focal_length_lsb = (focal_length & 0xff);
-
-	l1.use_max_aparture_value = 1;
-	l1.max_aparture = 1;
-	l1.max_aparture_decimal = 40;
+	FILE *csv = fopen("lenses.csv", "r");
+	int i = 0;
 	
-	l1.visnetting_brightness = 1;
-	l1.visnetting_red = -3;
-	l1.visnetting_blue = 5;
-	l1.ca_red = 7;
-	l1.ca_blue = -4;
-	l1.distortion = -12;
-	
-	FILE *fp = fopen("LENS0003.BIN", "wb");
-	fwrite((void *)&l1, sizeof(LensProfile), 1, fp);
-	fclose(fp);
+	while(1){
+		LensProfile l1 = {0};
+		uint16_t focal_length;
+		float max_aparture;
+		if (fscanf(csv, "%[^,],%d,%f\n", l1.lens_name, &focal_length, &max_aparture) == EOF || strlen(l1.lens_name) == 0)
+		{
+			break;
+		}
+		printf("LENS%04d.BIN: %s %dmm f/%.2f\n", i, l1.lens_name, focal_length, max_aparture);
+			
+		memcpy(l1.unknown_data0, unknown_header, 7);
+			
+		l1.lens_name_len = strlen(l1.lens_name);
+
+		
+		l1.focal_length_msb = (focal_length >> 8);
+		l1.focal_length_lsb = (focal_length & 0xff);
+
+		l1.use_max_aparture_value = 1;
+		l1.max_aparture = (uint8_t)max_aparture;
+		l1.max_aparture_decimal = (uint16_t)(max_aparture * 100) - (uint16_t)((uint8_t)max_aparture * 100);
+		
+		//l1.visnetting_brightness = 1;
+		//l1.visnetting_red = -3;
+		//l1.visnetting_blue = 5;
+		//l1.ca_red = 7;
+		//l1.ca_blue = -4;
+		//l1.distortion = -12;
+		char fn[16];
+		sprintf(fn, "LENS%04d.BIN", i);
+		FILE *fp = fopen(fn, "wb");
+		fwrite((void *)&l1, sizeof(LensProfile), 1, fp);
+		fclose(fp);
+		
+		i++;
+	}
 }
