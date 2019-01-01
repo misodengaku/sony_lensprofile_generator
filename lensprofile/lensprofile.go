@@ -1,6 +1,7 @@
 package lensprofile
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -23,6 +24,10 @@ type Profile struct {
 }
 
 func (p Profile) Validation() error {
+	if len(p.LensName) == 0 {
+		return fmt.Errorf("LensName is required")
+	}
+
 	if len(p.LensName) > 64 {
 		return fmt.Errorf("LensName must not be longer than 64 bytes")
 	}
@@ -83,21 +88,30 @@ func (p Profile) Encode() ([]byte, error) {
 	return data, nil
 }
 
-// typedef struct {
-// 	uint8_t lens_name_len; // max 64(0x40)
-// 	uint8_t lens_name[64];
-// 	uint8_t padding0[320]; // 0
-// 	uint8_t unknown_data1; // 1, not related to focal_length field?
-// 	uint8_t focal_length_msb; // 256mm -> 01, 123mm -> 00
-// 	uint8_t focal_length_lsb; // 256mm -> 00, 123mm -> 7B
-// 	uint8_t use_max_aparture_value; // 1 -> use max_aparture field value
-// 	uint8_t max_aparture; // f7.1 -> 7
-// 	uint8_t max_aparture_decimal; // f7.1 -> 10, f6.3 -> 30
-// 	int8_t visnetting_brightness;
-// 	int8_t visnetting_red;
-// 	int8_t visnetting_blue;
-// 	int8_t ca_red; // ca = Chromatic aberration
-// 	int8_t ca_blue;
-// 	int8_t distortion;
-// 	uint8_t padding1[92]; // 0
-// } LensProfile;
+func Unmarshal(data []byte) (Profile, error) {
+	p := Profile{}
+
+	// LensName
+	p.LensName = string(bytes.Trim(data[8:72], "\x00"))
+
+	// FocalLength
+	p.FocalLength = binary.BigEndian.Uint16(data[393:])
+
+	if data[395] == 0x01 {
+		p.Aparture = (float64(data[396]) + (float64(data[397]) / 100))
+	}
+
+	p.VignettingCorrection.Brightness = int(data[398])
+	p.VignettingCorrection.Red = int(data[399])
+	p.VignettingCorrection.Blue = int(data[400])
+
+	p.ChromaticAberrationCorrection.Red = int(data[401])
+	p.ChromaticAberrationCorrection.Blue = int(data[402])
+	p.DistortionCorrection = int(data[403])
+
+	if err := p.Validation(); err != nil {
+		return p, fmt.Errorf("validation fail: %s", err)
+	}
+
+	return p, nil
+}
